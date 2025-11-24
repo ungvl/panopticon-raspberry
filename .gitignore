@@ -1,0 +1,7 @@
+.env
+venv/
+__pycache__/
+*.pyc
+*.log
+activitywatch/
+src/known_faces/
