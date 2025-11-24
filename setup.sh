@@ -20,12 +20,29 @@ fi
 # Activate venv
 source venv/bin/activate
 
-# Install dependencies
-echo "[INFO] Installing dependencies..."
-pip install -r requirements.txt
+# Install base dependencies first
+echo "[INFO] Installing base dependencies..."
+pip install python-dotenv insightface opencv-python onnxruntime
+
+# Install ActivityWatch components from local directory
+echo "[INFO] Installing ActivityWatch from local directory..."
+if [ -d "activitywatch" ]; then
+    pip install ./activitywatch/aw-core
+    pip install ./activitywatch/aw-client
+    pip install ./activitywatch/aw-server
+    pip install ./activitywatch/aw-watcher-window
+else
+    echo "[ERROR] activitywatch directory not found!"
+    echo "[INFO] Please ensure the activitywatch submodule is cloned."
+    exit 1
+fi
 
 # Install system dependencies for tkinter (might be needed on some Linux distros)
-# echo "[INFO] You might need to install 'python3-tk' via apt if the GUI fails."
+echo "[INFO] Note: You might need to install 'python3-tk' via apt if the GUI config wizard fails."
+echo "[INFO] Run: sudo apt install python3-tk"
 
+echo ""
 echo "[INFO] Setup complete!"
-echo "[INFO] Run 'source venv/bin/activate' then 'python -m src.start_aw' to start."
+echo "[INFO] To start the tracker:"
+echo "  1. source venv/bin/activate"
+echo "  2. python -m src.start_aw"
