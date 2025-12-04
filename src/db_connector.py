@@ -31,10 +31,18 @@ class DatabaseConnector:
             # Convert ISO timestamp to Unix timestamp (seconds)
             dt = datetime.fromisoformat(data['timestamp'])
             start_time = int(dt.timestamp())
+            duration = int(data['duration'])
+            end_time = start_time + duration
+            
+            # Format day as ISO string (or just the date part if that's what Appwrite prefers, 
+            # but 'datetime' type usually takes ISO)
+            day = dt.isoformat()
             
             payload = {
                 "start_time": start_time,
-                "duration": int(data['duration']),
+                "duration": duration,  # Required by Function validation
+                "end_time": end_time,  # Required by DB schema
+                "day": day,            # Required by DB schema
                 "app_used": data['app']
             }
             
@@ -74,9 +82,18 @@ class DatabaseConnector:
         user_id = USER_ID_MAPPING[name]
         
         try:
+            # Convert ISO timestamp to Unix timestamp (seconds)
+            dt = datetime.fromisoformat(data['timestamp'])
+            start_time = int(dt.timestamp())
+            end_time = start_time + 1 # Momentary event
+            day = dt.isoformat()
+
             payload = {
-                "user_id": user_id,
-                "status": "present"
+                "users": user_id,      # Changed from 'user_id' to 'users' to match DB column
+                # "status": "present", # Removed 'status' as it's not in the schema
+                "start_time": start_time,
+                "end_time": end_time,
+                "day": day
             }
             
             response = requests.post(APPWRITE_FACE_FUNCTION_URL, json=payload)

@@ -4,7 +4,7 @@ echo [INFO] Starting Panopticon...
 :: Check if venv exists
 if not exist "venv" (
     echo [ERROR] Virtual environment not found!
-    echo [INFO] Please run setup.sh (via Git Bash) or set up venv manually first.
+    echo [INFO] Please run setup.sh via Git Bash or set up venv manually first.
     pause
     exit /b 1
 )
