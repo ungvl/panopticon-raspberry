@@ -106,11 +106,18 @@ panopticon-raspberry/
     - Add face images named `PersonName.jpg` (e.g., `John.jpg`, `Jane.jpg`)
     - Images should contain a clear, frontal face
 
-4.  **Start the tracker**:
-    ```bash
-    source venv/bin/activate
-    python -m src.start_aw
-    ```
+### Windows Shortcut
+Double-click `run.bat` to start the tracker.
+
+### Manual Start
+```bash
+source venv/bin/activate
+python -m src.start_aw
+```
+
+### Stop the Tracker
+- If running via `run.bat`: Close the command window or press `Ctrl+C`.
+- If running via terminal: Press `Ctrl+C`.
 
 5.  **Configuration**:
     - On the first run, a popup will ask for the Database Connection String
