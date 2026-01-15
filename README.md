@@ -15,10 +15,11 @@
 ...................              -@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:              ...................
 ...................              #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#              ...................
 ...................              *@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*              ...................
+...................              *@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*              ...................
 ...................               @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@               ...................
 ....................              @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@              ....................
 ....................               @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@              .....................
-......................              @@@@@@@@@@@@@@@@@@@@@@@@@@@@              ......................
+......................              @@@@@@@@@@@@@@@@@@@@@@@@@@              ......................
 .......................              @@@@@@@@@@@@@@@@@@@@@@@@@@              .......................
 .........................              @@@@@@@@@@@@@@@@@@@@@@              .........................
 ...........................              *@@@@@@@@@@@@@@@@*              ...........................
@@ -41,25 +42,25 @@
 
 A comprehensive tracking solution using ActivityWatch for screen tracking and InsightFace for face recognition, designed for Raspberry Pi.
 
+> [!IMPORTANT]
+> **Zero-Image Architecture**: This system uses a privacy-first approach. No facial images are stored on the device or disk. All face embeddings are strictly loaded from RAM via secure Cloud Sync.
+
 ## Features
 - **Screen Tracking**: Tracks active window title and application using ActivityWatch.
-- **Face Recognition**: Detects and identifies faces using InsightFace.
-- **Database Storage**: All events stored in SQLite (configurable).
-- **Easy Setup**: Configuration wizard on first run.
+- **Face Recognition**: Detects and identifies faces using InsightFace (RAM-only).
+- **Cloud Sync**: Fetches encrypted user identities directly from **Appwrite**.
+- **Privacy by Design**: No local database or image storage.
 
 ## Project Structure
 ```
 panopticon-raspberry/
 ├── src/                    # Source code
 │   ├── screen_tracker.py   # ActivityWatch integration
-│   ├── face_tracker.py     # Face recognition logic
-│   ├── face_logger.py      # Face tracking DB integration
-│   ├── db_connector.py     # Database handler
-│   ├── start_aw.py         # Main entry point
-│   ├── config_wizard.py    # Configuration GUI
-│   ├── verify_db.py        # Database verification tool
-│   └── known_faces/        # Face images for recognition (gitignored)
-├── activitywatch/          # ActivityWatch source (gitignored)
+│   ├── face_tracker.py     # Face recognition logic (RAM-only)
+│   ├── face_logger.py      # Orchestrator & Cloud Sync
+│   ├── db_connector.py     # Appwrite Cloud Handler
+│   └── start_aw.py         # Main entry point
+├── activitywatch/          # ActivityWatch submodules
 ├── setup.sh                # Setup script
 ├── requirements.txt        # Python dependencies
 └── README.md
@@ -71,6 +72,7 @@ panopticon-raspberry/
 - Python 3.7+
 - Git
 - Camera (for face tracking)
+- **Appwrite Cloud Account** (Project ID, API Key, Database)
 
 ### Installation
 
@@ -79,110 +81,60 @@ panopticon-raspberry/
     git clone --recurse-submodules <repository_url>
     cd panopticon-raspberry
     ```
-    
-    *If you already cloned without submodules:*
-    ```bash
-    git submodule update --init --recursive
-    ```
 
 2.  **Run the setup script**:
     ```bash
     chmod +x setup.sh
     ./setup.sh
     ```
+
+3.  **Configuration (.env)**:
+    Create a `.env` file in the root directory with your Appwrite credentials.
+    > [!WARNING]
+    > The **API Key** is required to fetch the restricted "Users" collection containing biometric data. Keep this file secure.
     
-    The script will:
-    - Create a Python virtual environment
-    - Install all dependencies
-    - Install ActivityWatch from the local `activitywatch/` directory
-    
-    *Note: You may need to install `python3-tk` if the GUI wizard fails:*
-    ```bash
-    sudo apt install python3-tk
+    ```ini
+    APPWRITE_ENDPOINT="https://cloud.appwrite.io/v1"
+    APPWRITE_PROJECT_ID="your_project_id"
+    APPWRITE_API_KEY="your_api_key_with_users_read_access"
+    APPWRITE_DATABASE_ID="your_database_id"
+    APPWRITE_USERS_COLLECTION_ID="your_users_collection_id"
     ```
 
-3.  **Add known faces** (optional):
-    - Create `src/known_faces/` directory if it doesn't exist
-    - Add face images named `PersonName.jpg` (e.g., `John.jpg`, `Jane.jpg`)
-    - Images should contain a clear, frontal face
+### Running the Tracker
 
-### Windows Shortcut
-Double-click `run.bat` to start the tracker.
+**Windows**:  
+Double-click `run.bat`.
 
-### Manual Start
+**Linux / Raspberry Pi**:
 ```bash
 source venv/bin/activate
 python -m src.start_aw
 ```
 
-### Stop the Tracker
-- If running via `run.bat`: Close the command window or press `Ctrl+C`.
-- If running via terminal: Press `Ctrl+C`.
+To stop, press `Ctrl+C`.
 
-5.  **Configuration**:
-    - On the first run, a popup will ask for the Database Connection String
-    - Leave it empty to use the default local SQLite database (`activity_data.db`)
-    - To change it later, edit the `.env` file directly
+## Data Architecture
 
-## Usage
+### Cloud Sync (Startup)
+1.  System boots.
+2.  `face_logger` calls `db_connector.sync_known_faces()`.
+3.  Connects to Appwrite using `APPWRITE_API_KEY`.
+4.  Fetches user list + **512-dim Face Embeddings**.
+5.  Injects embeddings directly into `FaceTracker` RAM.
+6.  *No images are ever saved to disk.*
 
-### Verify Data Collection
-Check the database to see collected events:
-```bash
-source venv/bin/activate
-python src/verify_db.py
-```
-
-### Stop the Tracker
-Press `Ctrl+C` in the terminal where the tracker is running.
-
-## Development
-
-### Local Setup
-```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install ActivityWatch from local directory
-pip install ./activitywatch/aw-core
-pip install ./activitywatch/aw-client
-pip install ./activitywatch/aw-server
-pip install ./activitywatch/aw-watcher-window
-
-# Run
-python -m src.start_aw
-```
-
-## Database Schema
-
-### screen_events
-- `id` (INTEGER): Primary key
-- `timestamp` (TEXT): ISO format timestamp
-- `app` (TEXT): Application name
-- `title` (TEXT): Window title
-- `duration` (REAL): Duration in seconds
-
-### face_events
-- `id` (INTEGER): Primary key
-- `timestamp` (TEXT): ISO format timestamp
-- `name` (TEXT): Detected person name or "Unknown"
-- `confidence` (REAL): Recognition confidence (0.0-1.0)
+### Event Logging
+- **Screen Events**: Pushed to Appwrite Function A.
+- **Face Events**: Pushed to Appwrite Function B (Face Receiver).
 
 ## Troubleshooting
 
-### Face tracker not detecting faces
-- Ensure camera is connected and accessible
-- Check that `insightface` models are downloaded (happens automatically on first run)
-- Verify face images in `src/known_faces/` are clear and frontal
+### Face tracker not detecting anyone (Unknown)
+- Check `.env` credentials.
+- Ensure the API Key has `read` permissions for the Users collection.
+- Verify that users in Appwrite have a valid `face_embedding` field (array of 512 floats).
 
 ### Screen tracker not working
-- Ensure ActivityWatch components installed correctly
-- Check that `aw-server` and `aw-watcher-window` are running
-
-### Configuration wizard not appearing
-- Install `python3-tk`: `sudo apt install python3-tk`
-- Manually create `.env` file with: `DB_CONNECTION_STRING=sqlite:///activity_data.db`
+- Ensure `aw-server` is running (started automatically by `start_aw.py`).
+- Check logs for "Connected to ActivityWatch".
