@@ -1,54 +1,39 @@
 import cv2
-import os
 import time
 import threading
 import numpy as np
 from insightface.app import FaceAnalysis
 
 class FaceTracker:
-    def __init__(self, known_faces_dir="src/known_faces", sim_threshold=0.4):
-        self.known_faces_dir = known_faces_dir
+    def __init__(self, known_faces=None, sim_threshold=0.4):
+        """
+        :param known_faces: List of dicts [{'name': '...', 'id': '...', 'embedding': np.array}, ...]
+        :param sim_threshold: Cosine similarity threshold for matching.
+        """
         self.sim_threshold = sim_threshold
         self.app = FaceAnalysis(name="buffalo_s")
         self.app.prepare(ctx_id=-1, det_size=(160, 160)) # Pi optimization
-        self.known_embeddings, self.known_names = self._load_known_faces()
+        
+        # Zero-Image Architecture: Load embeddings from memory only
+        self.known_embeddings = []
+        self.known_names = []
+        self.known_ids = []
+
+        if known_faces:
+             for person in known_faces:
+                 self.known_embeddings.append(person['embedding'])
+                 self.known_names.append(person['name'])
+                 # Store ID if available, defaulting to None
+                 self.known_ids.append(person.get('id'))
+        
+        self.known_embeddings = np.array(self.known_embeddings)
+        print(f"[INFO] FaceTracker initialized with {len(self.known_embeddings)} known faces in RAM.")
+
         self.running = False
         self.cap = None
         self.frame_holder = {"img": None}
         self.results_holder = {"faces": [], "last_run_time": time.time()}
         self.lock = threading.Lock()
-
-    def _load_known_faces(self):
-        known_embeddings = []
-        known_names = []
-        
-        if not os.path.isdir(self.known_faces_dir):
-            print(f"[INFO] No '{self.known_faces_dir}' directory found. Everyone will be 'Unknown'.")
-            return np.array([]), []
-
-        for filename in os.listdir(self.known_faces_dir):
-            filepath = os.path.join(self.known_faces_dir, filename)
-            if not os.path.isfile(filepath): continue
-
-            name, ext = os.path.splitext(filename)
-            if ext.lower() not in [".jpg", ".jpeg", ".png"]: continue
-
-            img = cv2.imread(filepath, cv2.IMREAD_UNCHANGED)
-            if img is None:
-                print(f"[WARN] Could not read {filepath}, skipping.")
-                continue
-
-            faces = self.app.get(img)
-            if not faces:
-                print(f"[WARN] No face found in {filename}, skipping.")
-                continue
-
-            emb = faces[0].normed_embedding 
-            known_embeddings.append(emb)
-            known_names.append(name)
-            print(f"[INFO] Loaded embedding for: {name}")
-
-        return np.array(known_embeddings), known_names
 
     def _cosine_sim_matrix(self, emb, known_embs):
         return np.dot(known_embs, emb)
@@ -69,7 +54,7 @@ class FaceTracker:
     def start(self, callback=None, show_window=True):
         """
         Starts the face tracker.
-        :param callback: Function to call with detected faces (list of dicts with 'name', 'confidence', 'bbox').
+        :param callback: Function to call with detected faces (list of dicts).
         :param show_window: Whether to show the OpenCV window.
         """
         self.cap = cv2.VideoCapture(0)
@@ -102,6 +87,7 @@ class FaceTracker:
                 for face in faces:
                     x1, y1, x2, y2 = face.bbox.astype(int)
                     label = "Unknown"
+                    user_id = None
                     confidence = 0.0
 
                     if len(self.known_embeddings) > 0:
@@ -112,10 +98,12 @@ class FaceTracker:
 
                         if best_sim > self.sim_threshold:
                             label = self.known_names[best_idx]
+                            user_id = self.known_ids[best_idx]
                             confidence = float(best_sim)
                     
                     detected_faces.append({
                         "name": label,
+                        "user_id": user_id,
                         "confidence": confidence,
                         "bbox": (x1, y1, x2, y2)
                     })
@@ -146,6 +134,6 @@ class FaceTracker:
                 cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    # Test run
+    # Test run (empty)
     tracker = FaceTracker()
     tracker.start()

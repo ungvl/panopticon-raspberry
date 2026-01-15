@@ -10,7 +10,16 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class FaceLogger:
     def __init__(self):
         self.db = DatabaseConnector()
-        self.tracker = FaceTracker(known_faces_dir="src/known_faces")
+        
+        # Zero-Image Architecture: Sync faces from Cloud RAM-to-RAM
+        self.known_faces = self.db.sync_known_faces()
+        
+        if not self.known_faces:
+            logging.warning("No known faces fetched from Appwrite. Tracker will only detect 'Unknown' faces.")
+        else:
+            logging.info(f"Loaded {len(self.known_faces)} faces from Appwrite.")
+
+        self.tracker = FaceTracker(known_faces=self.known_faces)
         self.last_logged = {} # {name: timestamp}
         self.log_interval = 5.0 # Seconds between logs for the same face
 
@@ -19,6 +28,7 @@ class FaceLogger:
         for face in faces:
             name = face['name']
             confidence = face['confidence']
+            user_id = face.get('user_id')
             
             # Rate limiting
             if name in self.last_logged:
@@ -30,6 +40,7 @@ class FaceLogger:
             data = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "name": name,
+                "user_id": user_id,
                 "confidence": confidence
             }
             
@@ -38,10 +49,6 @@ class FaceLogger:
 
     def start(self):
         logging.info("Starting Face Logger...")
-        # Check if we are in a headless environment (optional logic could go here)
-        # For now, we assume we might want to see the window if connected to a screen
-        # But on a Pi over SSH, we might want show_window=False
-        # Let's default to True for now, user can change or we can detect DISPLAY env var
         
         import os
         show_window = True

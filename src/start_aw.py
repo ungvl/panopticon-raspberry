@@ -2,7 +2,6 @@ import subprocess
 import time
 import sys
 import os
-from . import config_wizard
 
 def start_process(command, name):
     print(f"[INFO] Starting {name}...")
@@ -17,8 +16,8 @@ def start_process(command, name):
         return None
 
 def main():
-    # Ensure configuration exists
-    config_wizard.ensure_config()
+    # Configuration is now handled via .env and Appwrite variables
+    pass
 
     processes = []
     
