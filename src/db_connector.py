@@ -56,7 +56,10 @@ class DatabaseConnector:
                 user_id = doc.get("$id")
                 emb_raw = doc.get("face_embedding") 
                 
-                # Check for face_embedding_string if that's the field name used
+                # Check for face_value (Primary) or legacy fields
+                if not emb_raw:
+                     emb_raw = doc.get("face_value")
+                
                 if not emb_raw:
                      emb_raw = doc.get("face_embedding_string")
 
