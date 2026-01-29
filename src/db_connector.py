@@ -19,6 +19,38 @@ class DatabaseConnector:
         print(f"[INFO] DatabaseConnector initialized (Appwrite Cloud Sync)")
         if not all([PROJECT_ID, API_KEY, DATABASE_ID, USERS_COLLECTION_ID]):
             print("[WARN] Missing Appwrite environment variables. Sync will fail.")
+        
+        self.primary_user_id = self._fetch_primary_user_id()
+
+    def _fetch_primary_user_id(self):
+        """
+        Fetches the first available user ID to associate with this device's activity.
+        """
+        print("[INFO] Fetching primary user for activity logging...")
+        try:
+             # Re-using the known faces sync logic to just get one ID would be inefficient if we parse everything.
+             # Let's just do a quick fetch.
+            headers = {
+                "X-Appwrite-Project": PROJECT_ID,
+                "X-Appwrite-Key": API_KEY,
+                "Content-Type": "application/json"
+            }
+            url = f"{APPWRITE_ENDPOINT}/databases/{DATABASE_ID}/collections/{USERS_COLLECTION_ID}/documents"
+            params = {"limit": 1} 
+            response = requests.get(url, headers=headers, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                documents = data.get("documents", [])
+                if documents:
+                    uid = documents[0].get("$id")
+                    print(f"[INFO] Primary User ID set to: {uid}")
+                    return uid
+            print("[WARN] No users found in Appwrite. Activity logs will be anonymous.")
+            return None
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch primary user: {e}")
+            return None
 
     def sync_known_faces(self):
         """
@@ -107,8 +139,11 @@ class DatabaseConnector:
         """
         Sends activity data to the Appwrite Function.
         """
-        # Hardcoded Function URL (Legacy support, maybe move to env later)
-        APPWRITE_FUNCTION_URL = 'https://692d6ca4000b43d5b55e.fra.appwrite.run/'
+        # Load Function URL from env
+        APPWRITE_FUNCTION_URL = os.getenv("APPWRITE_FUNCTION_URL")
+        if not APPWRITE_FUNCTION_URL:
+            # Fallback (though env should be set)
+            APPWRITE_FUNCTION_URL = 'https://692d6ca4000b43d5b55e.fra.appwrite.run/'
         
         try:
             dt = datetime.fromisoformat(data['timestamp'])
@@ -122,13 +157,27 @@ class DatabaseConnector:
                 "duration": duration,
                 "end_time": end_time,
                 "day": day,
-                "app_used": data['app']
+                "app_used": data['app'],
+                "app_activity": data.get('title', ''), # Include window title as app_activity
+                "users": self.primary_user_id if self.primary_user_id else [] 
+                # Note: Schema requires 'users' to be a Relationship. 
+                # If schema expects a single ID, we send the ID string.
+                # If schema expects an array (even for many-to-one sometimes in checks), we might need [ID].
+                # But based on the previous "Face Receiver" experience:
+                # - Face Receiver demanded an Array in code, but DB wanted Single ID.
+                # - Activity Receiver code provided by user earlier:
+                #   ...(users && { users: users }),
+                #   And schema screenshot shows "users: Many to one".
+                #   Standard Appwrite Many-to-One expects the ID of the related document.
+                #   Let's try sending the ID string first.
             }
             
             response = requests.post(APPWRITE_FUNCTION_URL, json=payload)
             
             if response.status_code == 200:
                 print(f"[Appwrite] Activity logged: {data['app']}")
+                # Optional: print response for debugging if needed, or if user wants to see it
+                # print(f"[DEBUG] Response: {response.text}") 
             else:
                 print(f"[Appwrite] Error {response.status_code}: {response.text}")
                 
@@ -145,7 +194,9 @@ class DatabaseConnector:
         """
         Sends face attendance data to the Appwrite Face Receiver Function.
         """
-        APPWRITE_FACE_FUNCTION_URL = 'https://6930d3790014db9774a2.fra.appwrite.run/'
+        APPWRITE_FACE_FUNCTION_URL = os.getenv("APPWRITE_FACE_FUNCTION_URL")
+        if not APPWRITE_FACE_FUNCTION_URL:
+             APPWRITE_FACE_FUNCTION_URL = 'https://6930d3790014db9774a2.fra.appwrite.run/'
         
         name = data['name']
         user_id = data.get('user_id') # Expecting user_id to be passed now if possible
@@ -180,12 +231,11 @@ class DatabaseConnector:
             day = dt.isoformat()
 
             payload = {
-                "users": real_user_id,
+                "users": [real_user_id], # Must be an array
                 "start_time": start_time,
                 "end_time": end_time,
                 "day": day
             }
-            
             response = requests.post(APPWRITE_FACE_FUNCTION_URL, json=payload)
             
             if response.status_code == 200:
