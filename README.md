@@ -76,14 +76,14 @@ panopticon-raspberry/
 
 ### Quick Setup
 
-1.  **Clone the repository with submodules**:
+1.  **Clone the repository**:
     ```bash
-    git clone --recurse-submodules https://github.com/vladu/panopticon-raspberry.git
+    git clone https://github.com/ungvl/panopticon-raspberry.git
     cd panopticon-raspberry
     ```
 
 2.  **Run the setup script**:
-    The setup script will install system dependencies, create a virtual environment, and install all Python packages.
+    The setup script will install system dependencies, initialize submodules, create a virtual environment, and install all Python packages.
     ```bash
     chmod +x setup.sh
     ./setup.sh
@@ -102,12 +102,13 @@ panopticon-raspberry/
 
 ### Running the Tracker
 
-To start everything (ActivityWatch + Face Tracker):
-
 **Linux / Raspberry Pi**:
 ```bash
 ./run.sh
 ```
+
+> [!NOTE]
+> **First Run**: On the first start, the system will download approximately 200MB of AI models. This may take a few minutes.
 
 **Windows**:  
 ```bash
@@ -143,4 +144,4 @@ To stop, press `Ctrl+C` in the terminal.
 
 ### Missing Libraries
 - The `setup.sh` installs most common libraries. If you see `ImportError: lib...so.X`, try running:
-  `sudo apt install libatlas-base-dev libjasper-dev`
+  `sudo apt install libopenblas-dev libopenjp2-7-dev`

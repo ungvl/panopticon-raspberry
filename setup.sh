@@ -11,14 +11,26 @@ if ! command -v python3 &> /dev/null; then
      exit 1
 fi
 
+# Check if ActivityWatch submodules are present
+if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
+    echo "[WARNING] ActivityWatch submodules seem to be missing!"
+    echo "[INFO] Attempting to initialize submodules..."
+    git submodule update --init --recursive
+    if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
+        echo "[ERROR] Could not initialize submodules. Did you clone with --recurse-submodules?"
+        echo "[ERROR] Please run: git submodule update --init --recursive"
+        exit 1
+    fi
+fi
+
 # Install system dependencies for OpenCV and InsightFace on Raspberry Pi
 echo "[INFO] Installing system dependencies (requires sudo)..."
 sudo apt-get update
 sudo apt-get install -y \
     python3-pip \
     python3-venv \
-    libatlas-base-dev \
-    libjasper-dev \
+    libopenblas-dev \
+    libopenjp2-7-dev \
     libqt5gui5 \
     libqt5core5a \
     libqt5widgets5 \
@@ -84,3 +96,5 @@ echo ""
 echo "[INFO] Setup complete!"
 echo "[INFO] To start the tracker, run: ./run.sh"
 echo "[INFO] Note: Make sure your .env file is configured."
+echo "[INFO] Note: On the first run, the system will download ~200MB of AI models."
+echo "[INFO]       This may take a few minutes depending on your internet speed."
