@@ -1,8 +1,8 @@
 import time
 import logging
 from datetime import datetime, timezone
-from .db_connector import DatabaseConnector
-from .face_tracker import FaceTracker
+from src.db_connector import DatabaseConnector
+from src.face_tracker import FaceTracker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
