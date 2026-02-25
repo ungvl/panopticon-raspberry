@@ -15,10 +15,23 @@ fi
 if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
     echo "[WARNING] ActivityWatch submodules seem to be missing!"
     echo "[INFO] Attempting to initialize submodules..."
-    git submodule update --init --recursive
+    
+    # Try root level first (if it's a standard submodule)
+    git submodule update --init --recursive 2>/dev/null || true
+    
+    # If still missing, try running inside activitywatch/ (if it's a nested repo)
+    if [ ! -f "activitywatch/aw-server/pyproject.toml" ] && [ -d "activitywatch/.git" ] || [ -f "activitywatch/.git" ]; then
+        echo "[INFO] Detected activitywatch as a nested repository, initializing sub-submodules..."
+        pushd activitywatch > /dev/null
+        git submodule update --init --recursive
+        popd > /dev/null
+    fi
+
+    # Final check
     if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
-        echo "[ERROR] Could not initialize submodules. Did you clone with --recurse-submodules?"
-        echo "[ERROR] Please run: git submodule update --init --recursive"
+        echo "[ERROR] Could not initialize submodules automatically."
+        echo "[INFO] Please ensure you are connected to the internet and try: "
+        echo "       git submodule update --init --recursive"
         exit 1
     fi
 fi
