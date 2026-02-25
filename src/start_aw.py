@@ -16,6 +16,13 @@ def start_process(command, name):
         return None
 
 def main():
+    print("="*60)
+    print("[INFO] PANOPTICON STARTUP")
+    print("[INFO] Note: If you see 'Code made an unclear branch' warnings below,")
+    print("[INFO]       these are non-fatal warnings caused by the Raspberry Pi")
+    print("[INFO]       window manager (Wayland). Tracking is still active.")
+    print("="*60)
+    
     # Configuration is now handled via .env and Appwrite variables
     pass
 

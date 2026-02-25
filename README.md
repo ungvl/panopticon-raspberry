@@ -145,3 +145,9 @@ To stop, press `Ctrl+C` in the terminal.
 ### Missing Libraries
 - The `setup.sh` installs most common libraries. If you see `ImportError: lib...so.X`, try running:
   `sudo apt install libopenblas-dev libopenjp2-7-dev`
+
+### Wayland & Window Tracking
+If you see `[WARNING]: Code made an unclear branch` in the logs:
+- **What it means**: The new Raspberry Pi OS uses "Wayland," which restricts applications from seeing each other's window titles for security.
+- **Is it a problem?**: No, it's a non-fatal warning. The watcher will still try to capture events.
+- **How to fix**: To get perfect window titles, you can switch your Pi to the "X11" backend using `raspi-config` (Advanced Options -> Wayland -> X11).
