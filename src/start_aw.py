@@ -33,6 +33,7 @@ def main():
         # aw-watcher-window SKIPPED — native X11 tracking is in screen_tracker 
         (f'"{sys.executable}" -m src.screen_tracker', "screen_tracker", True),
         (f'"{sys.executable}" -m src.face_logger', "face_logger", False),
+        (f'"{sys.executable}" -m src.clock', "lcd_clock", False),
     ]
 
     # Start aw-server first and wait for it
