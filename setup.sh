@@ -11,29 +11,59 @@ if ! command -v python3 &> /dev/null; then
      exit 1
 fi
 
+# Check for internet connectivity
+echo "[INFO] Checking internet connectivity..."
+if ! ping -c 1 8.8.8.8 &> /dev/null; then
+    echo "[WARNING] Could not reach 8.8.8.8. You might have internet issues."
+    echo "[INFO] Note: If you are behind a proxy, ensure HTTP_PROXY is set."
+fi
+
 # Check if ActivityWatch submodules are present
 if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
     echo "[WARNING] ActivityWatch submodules seem to be missing!"
     echo "[INFO] Attempting to initialize submodules..."
     
-    # Try root level first (if it's a standard submodule)
-    git submodule update --init --recursive 2>/dev/null || true
-    
-    # If still missing, try running inside activitywatch/ (if it's a nested repo)
-    if [ ! -f "activitywatch/aw-server/pyproject.toml" ] && [ -d "activitywatch/.git" ] || [ -f "activitywatch/.git" ]; then
-        echo "[INFO] Detected activitywatch as a nested repository, initializing sub-submodules..."
-        pushd activitywatch > /dev/null
-        git submodule update --init --recursive
-        popd > /dev/null
-    fi
-
-    # Final check
-    if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
-        echo "[ERROR] Could not initialize submodules automatically."
-        echo "[INFO] Please ensure you are connected to the internet and try: "
-        echo "       git submodule update --init --recursive"
+    # Check if we are in a git repository
+    if [ ! -d ".git" ]; then
+        echo "[ERROR] This directory is not a git repository. Cannot auto-pull submodules."
+        echo "[INFO] Please clone the repository properly using: "
+        echo "       git clone --recurse-submodules https://github.com/ungvl/panopticon-raspberry.git"
         exit 1
     fi
+
+    echo "[INFO] Running: git submodule update --init --recursive"
+    if git submodule update --init --recursive; then
+        echo "[INFO] Submodules initialized via root."
+    else
+        echo "[WARNING] Submodule update failed. Trying alternative methods..."
+        
+        # Method 2: Try to fix the index (sometimes needed if files exist but submodules don't)
+        git submodule init &> /dev/null || true
+        git submodule update --recursive &> /dev/null || true
+
+        # Method 3: Direct Clone Fallback (The Nuclear Option)
+        if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
+            echo "[INFO] Submodule system failing. Attempting a direct clone of ActivityWatch..."
+            
+            # Backup existing directory if it's not empty/working
+            if [ -d "activitywatch" ] && [ "$(ls -A activitywatch)" ]; then
+                echo "[INFO] Moving existing activitywatch directory to backup..."
+                mv activitywatch activitywatch_backup_$(date +%s)
+            fi
+
+            mkdir -p activitywatch
+            git clone --recursive https://github.com/ActivityWatch/activitywatch.git activitywatch
+        fi
+    fi
+
+    # Final verification
+    if [ ! -f "activitywatch/aw-server/pyproject.toml" ]; then
+        echo "[ERROR] ActivityWatch files are still missing."
+        echo "[INFO] Please manually run: "
+        echo "       git clone --recursive https://github.com/ActivityWatch/activitywatch.git activitywatch"
+        exit 1
+    fi
+    echo "[INFO] ActivityWatch dependencies verified."
 fi
 
 # Install system dependencies for OpenCV and InsightFace on Raspberry Pi
