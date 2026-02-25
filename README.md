@@ -69,20 +69,21 @@ panopticon-raspberry/
 ## Deployment on Raspberry Pi
 
 ### Prerequisites
+- Raspberry Pi (4 or 5 recommended for better face tracking performance)
+- Camera (USB or Pi Camera)
 - Python 3.7+
 - Git
-- Camera (for face tracking)
-- **Appwrite Cloud Account** (Project ID, API Key, Database)
 
-### Installation
+### Quick Setup
 
 1.  **Clone the repository with submodules**:
     ```bash
-    git clone --recurse-submodules <repository_url>
+    git clone --recurse-submodules https://github.com/vladu/panopticon-raspberry.git
     cd panopticon-raspberry
     ```
 
 2.  **Run the setup script**:
+    The setup script will install system dependencies, create a virtual environment, and install all Python packages.
     ```bash
     chmod +x setup.sh
     ./setup.sh
@@ -90,29 +91,30 @@ panopticon-raspberry/
 
 3.  **Configuration (.env)**:
     Create a `.env` file in the root directory with your Appwrite credentials.
-    > [!WARNING]
-    > The **API Key** is required to fetch the restricted "Users" collection containing biometric data. Keep this file secure.
     
     ```ini
     APPWRITE_ENDPOINT="https://cloud.appwrite.io/v1"
     APPWRITE_PROJECT_ID="your_project_id"
-    APPWRITE_API_KEY="your_api_key_with_users_read_access"
+    APPWRITE_API_KEY="your_api_key"
     APPWRITE_DATABASE_ID="your_database_id"
     APPWRITE_USERS_COLLECTION_ID="your_users_collection_id"
     ```
 
 ### Running the Tracker
 
-**Windows**:  
-Double-click `run.bat`.
+To start everything (ActivityWatch + Face Tracker):
 
 **Linux / Raspberry Pi**:
 ```bash
-source venv/bin/activate
-python -m src.start_aw
+./run.sh
 ```
 
-To stop, press `Ctrl+C`.
+**Windows**:  
+```bash
+run.bat
+```
+
+To stop, press `Ctrl+C` in the terminal.
 
 ## Data Architecture
 
@@ -125,16 +127,20 @@ To stop, press `Ctrl+C`.
 6.  *No images are ever saved to disk.*
 
 ### Event Logging
-- **Screen Events**: Pushed to Appwrite Function A.
-- **Face Events**: Pushed to Appwrite Function B (Face Receiver).
+- **Screen Events**: Pushed to Appwrite via ActivityWatch integration.
+- **Face Events**: Pushed to Appwrite Face Receiver function.
 
 ## Troubleshooting
 
-### Face tracker not detecting anyone (Unknown)
-- Check `.env` credentials.
-- Ensure the API Key has `read` permissions for the Users collection.
-- Verify that users in Appwrite have a valid `face_embedding` field (array of 512 floats).
+### Camera Issues
+- Ensure the camera is connected and enabled in `raspi-config`.
+- If using the Legacy camera stack, ensure it is enabled.
+- For `libcamera`, you might need `libcameradev` dependencies.
 
-### Screen tracker not working
-- Ensure `aw-server` is running (started automatically by `start_aw.py`).
-- Check logs for "Connected to ActivityWatch".
+### Performance
+- If face tracking is slow, ensure you're using a Pi 4/5. 
+- The system is optimized with `det_size=(160, 160)` for faster inference.
+
+### Missing Libraries
+- The `setup.sh` installs most common libraries. If you see `ImportError: lib...so.X`, try running:
+  `sudo apt install libatlas-base-dev libjasper-dev`
