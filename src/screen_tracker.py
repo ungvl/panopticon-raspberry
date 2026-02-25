@@ -2,134 +2,194 @@ import time
 import logging
 import os
 import sys
-from aw_core.models import Event
-from aw_client import ActivityWatchClient
-from .db_connector import DatabaseConnector
+import traceback
 
-# Import Xlib for native tracking
+# Configure logging FIRST
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- Conditional Imports ---
+# ActivityWatch is OPTIONAL. The tracker works without it.
+try:
+    from aw_core.models import Event
+    from aw_client import ActivityWatchClient
+    AW_AVAILABLE = True
+except ImportError:
+    logging.warning("ActivityWatch libraries (aw_core/aw_client) not found. AW logging disabled.")
+    AW_AVAILABLE = False
+
+# Database connector
+try:
+    from src.db_connector import DatabaseConnector
+    DB_AVAILABLE = True
+except ImportError:
+    logging.warning("DatabaseConnector not found. Appwrite logging disabled.")
+    DB_AVAILABLE = False
+
+# Xlib for native X11 window tracking
 try:
     import Xlib
     import Xlib.display
     from Xlib import X
+    XLIB_AVAILABLE = True
 except ImportError:
-    logging.error("python-xlib is not installed. Native tracking will fail.")
-    Xlib = None
+    logging.warning("python-xlib not installed. Native X11 tracking disabled.")
+    XLIB_AVAILABLE = False
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+# --- X11 Window Info ---
 def get_native_window_info(display):
+    """Get the currently focused window's app class and title via X11."""
     if not display:
-        return None, None
-        
+        return "unknown", "unknown"
+
     try:
-        screen = display.screen()
-        root = screen.root
-        
-        # Check Active Window property (EWMH standard)
+        root = display.screen().root
         NET_ACTIVE_WINDOW = display.intern_atom("_NET_ACTIVE_WINDOW")
         prop = root.get_full_property(NET_ACTIVE_WINDOW, X.AnyPropertyType)
-        
+
         if not prop:
             return "unknown", "unknown"
-            
+
         window_id = prop.value[0]
         if window_id == 0:
             return "unknown", "unknown"
-            
+
         window = display.create_resource_object("window", window_id)
-        
+
         # Get Class
         cls_tuple = window.get_wm_class()
         cls = cls_tuple[1] if cls_tuple else "unknown"
-        
+
         # Get Name
         name = window.get_wm_name()
-        
-        # Fallback for name if it's bytes
         if isinstance(name, bytes):
             name = name.decode('utf-8', 'ignore')
         if not name:
             name = "unknown"
-            
+
         return cls, name
     except Exception as e:
-        logging.debug(f"Error getting native window info: {e}")
+        logging.debug(f"X11 query error: {e}")
         return "unknown", "unknown"
 
-def main():
-    # Initialize Database Connector
-    db = DatabaseConnector()
 
-    # Initialize X11 Display
+# --- Main Tracker ---
+def run_tracker():
+    logging.info("=" * 50)
+    logging.info("PANOPTICON SCREEN TRACKER STARTING")
+    logging.info("=" * 50)
+
+    # 1. Database Connector (optional)
+    db = None
+    if DB_AVAILABLE:
+        try:
+            db = DatabaseConnector()
+            logging.info("DatabaseConnector: OK")
+        except Exception as e:
+            logging.error(f"DatabaseConnector failed: {e}")
+    
+    # 2. X11 Display
     display = None
-    if Xlib:
+    if XLIB_AVAILABLE:
         try:
             display = Xlib.display.Display()
-            logging.info("Native X11 display connection established.")
+            logging.info(f"X11 Display: OK (DISPLAY={os.environ.get('DISPLAY', 'not set')})")
         except Exception as e:
-            logging.error(f"Failed to connect to X11 display: {e}")
-
-    # Initialize ActivityWatch Client with retry logic
-    client_name = "panopticon-screen-tracker"
-    aw = None
+            logging.error(f"X11 Display failed: {e}")
     
-    logging.info("Connecting to ActivityWatch...")
-    while aw is None:
+    if not display:
+        logging.error("No display connection. Cannot track windows. Exiting tracker.")
+        logging.error("Make sure you are running under X11 and DISPLAY is set.")
+        # Don't return immediately — sleep so start_aw doesn't spam restarts
+        time.sleep(30)
+        return
+
+    # 3. ActivityWatch (optional)
+    aw = None
+    bucket_id = None
+    if AW_AVAILABLE:
         try:
+            client_name = "panopticon-screen-tracker"
             aw = ActivityWatchClient(client_name, testing=False)
             bucket_id = f"{client_name}_window"
-            event_type = "currentwindow"
-            aw.create_bucket(bucket_id, event_type=event_type, queued=True)
-            logging.info(f"Connected to ActivityWatch. Bucket: {bucket_id}")
+            aw.create_bucket(bucket_id, event_type="currentwindow", queued=True)
+            logging.info(f"ActivityWatch: OK (bucket: {bucket_id})")
         except Exception as e:
-            logging.warning(f"Could not connect to ActivityWatch ({e}). Retrying in 5s...")
-            time.sleep(5)
-    
-    bucket_id = f"{client_name}_window"
-    logging.info(f"Tracking active window directly via X11...")
+            logging.warning(f"ActivityWatch connection failed: {e}. Continuing without AW.")
+            aw = None
+
+    logging.info("Tracking active window via native X11...")
 
     last_app = None
     last_title = None
     start_time = time.time()
 
-    try:
-        while True:
+    while True:
+        try:
             app, title = get_native_window_info(display)
-            
-            # Simple change detection
+
+            # Change detection
             if app != last_app or title != last_title:
                 now = time.time()
                 duration = now - start_time
-                
-                # Log previous event if it lasted more than 1s
-                if last_app and duration > 0.1:
-                    db_data = {
-                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
-                        "app": last_app,
-                        "title": last_title,
-                        "duration": round(duration, 2)
-                    }
-                    logging.info(f"Activity: {last_app} - {last_title} ({round(duration, 1)}s)")
-                    db.send_data(db_data)
-                    
-                    # Also log to ActivityWatch
-                    event = Event(timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)), 
-                                 duration=duration, 
-                                 data={"app": last_app, "title": last_title})
-                    aw.heartbeat(bucket_id, event, pulsetime=10)
 
-                # Reset for new event
+                # Log previous window session (if > 1 second)
+                if last_app and duration > 1.0:
+                    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time))
+                    logging.info(f"Activity: {last_app} - {last_title} ({round(duration, 1)}s)")
+
+                    # Send to Appwrite
+                    if db:
+                        try:
+                            db.send_data({
+                                "timestamp": ts,
+                                "app": last_app,
+                                "title": last_title,
+                                "duration": round(duration, 2)
+                            })
+                        except Exception as e:
+                            logging.error(f"Appwrite send failed: {e}")
+
+                    # Send to ActivityWatch
+                    if aw and bucket_id:
+                        try:
+                            event = Event(
+                                timestamp=ts,
+                                duration=duration,
+                                data={"app": last_app, "title": last_title}
+                            )
+                            aw.heartbeat(bucket_id, event, pulsetime=10)
+                        except Exception as e:
+                            logging.warning(f"AW heartbeat failed: {e}")
+
+                # Reset for new window
                 last_app = app
                 last_title = title
                 start_time = now
-            
-            time.sleep(1) # Poll every second
 
-    except KeyboardInterrupt:
-        logging.info("Stopping screen tracker...")
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
+            time.sleep(1)
+
+        except KeyboardInterrupt:
+            logging.info("Screen tracker stopped by user.")
+            return
+        except Exception as e:
+            logging.error(f"Tracking loop error: {e}")
+            traceback.print_exc()
+            time.sleep(2)
+
+
+def main():
+    """Entry point with auto-restart on crash."""
+    while True:
+        try:
+            run_tracker()
+        except KeyboardInterrupt:
+            logging.info("Stopping screen tracker...")
+            break
+        except Exception as e:
+            logging.error(f"Fatal error: {e}. Restarting in 10s...")
+            traceback.print_exc()
+            time.sleep(10)
+
 
 if __name__ == "__main__":
     main()

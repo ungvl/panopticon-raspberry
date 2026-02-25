@@ -4,11 +4,15 @@ import sys
 import os
 
 def start_process(command, name):
+    """Start a subprocess and return (proc, name) tuple."""
     print(f"[INFO] Starting {name}...")
     try:
-        # Use Popen to start the process in the background
-        # We redirect stdout/stderr to avoid cluttering the console, or we could log them
-        proc = subprocess.Popen(command, shell=True)
+        proc = subprocess.Popen(
+            command, 
+            shell=True,
+            stdout=sys.stdout,  # Pipe output to console so we can see errors
+            stderr=sys.stderr
+        )
         print(f"[INFO] {name} started with PID {proc.pid}")
         return proc
     except Exception as e:
@@ -16,58 +20,70 @@ def start_process(command, name):
         return None
 
 def main():
-    print("="*60)
+    print("=" * 60)
     print("[INFO] PANOPTICON STARTUP")
-    print("[INFO] Note: If you see 'Code made an unclear branch' warnings below,")
-    print("[INFO]       these are non-fatal warnings caused by the Raspberry Pi")
-    print("[INFO]       window manager (Wayland). Tracking is still active.")
-    print("="*60)
-    
-    # Configuration is now handled via .env and Appwrite variables
-    pass
+    print(f"[INFO] Python: {sys.executable}")
+    print(f"[INFO] DISPLAY: {os.environ.get('DISPLAY', 'NOT SET')}")
+    print("=" * 60)
 
-    processes = []
+    # Define all processes to run
+    # Format: (command, name, required)
+    process_defs = [
+        (f'"{sys.executable}" -m aw_server', "aw-server", False),
+        # aw-watcher-window SKIPPED — native X11 tracking is in screen_tracker 
+        (f'"{sys.executable}" -m src.screen_tracker', "screen_tracker", True),
+        (f'"{sys.executable}" -m src.face_logger', "face_logger", False),
+    ]
+
+    # Start aw-server first and wait for it
+    server_cmd, server_name, _ = process_defs[0]
+    server_proc = start_process(server_cmd, server_name)
     
-    # 1. Start aw-server
-    server_proc = start_process(f'"{sys.executable}" -m aw_server', "aw-server")
-    if server_proc:
-        processes.append(server_proc)
-    
-    # Wait a bit for server to start
+    print("[INFO] Waiting 5s for aw-server to initialize...")
     time.sleep(5)
-    
-    # 2. aw-watcher-window SKIPPED (Native X11 tracking is now inside screen_tracker)
-    # window_proc = start_process(f'"{sys.executable}" -m aw_watcher_window', "aw-watcher-window")
-    # if window_proc:
-    #     processes.append(window_proc)
 
-    # 3. Start screen_tracker.py
-    # We run it as a module to handle relative imports
-    tracker_proc = start_process(f'"{sys.executable}" -m src.screen_tracker', "screen_tracker")
-    if tracker_proc:
-        processes.append(tracker_proc)
+    # Track running processes: list of (proc, command, name)
+    running = []
+    if server_proc:
+        running.append((server_proc, server_cmd, server_name))
 
-    # 4. Start face_logger.py
-    face_proc = start_process(f'"{sys.executable}" -m src.face_logger', "face_logger")
-    if face_proc:
-        processes.append(face_proc)
+    # Start remaining processes
+    for cmd, name, required in process_defs[1:]:
+        proc = start_process(cmd, name)
+        if proc:
+            running.append((proc, cmd, name))
+        elif required:
+            print(f"[ERROR] Required process {name} failed to start!")
 
     print("[INFO] All processes started. Press Ctrl+C to stop.")
+    print("[INFO] Monitoring processes for crashes...")
 
     try:
         while True:
-            time.sleep(1)
-            # Check if processes are still alive
-            for p in processes:
-                if p.poll() is not None:
-                    print(f"[WARN] Process {p.args} exited with code {p.returncode}")
-                    # Optionally restart or exit
+            time.sleep(3)
+            
+            for i, (proc, cmd, name) in enumerate(running):
+                if proc.poll() is not None:
+                    exit_code = proc.returncode
+                    print(f"[WARN] {name} exited with code {exit_code}. Restarting in 5s...")
+                    time.sleep(5)
                     
+                    new_proc = start_process(cmd, name)
+                    if new_proc:
+                        running[i] = (new_proc, cmd, name)
+                    else:
+                        print(f"[ERROR] Failed to restart {name}")
+
     except KeyboardInterrupt:
-        print("\n[INFO] Stopping processes...")
-        for p in processes:
-            p.terminate()
-            # p.wait() # Wait for termination
+        print("\n[INFO] Stopping all processes...")
+        for proc, _, name in running:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+                print(f"[INFO] {name} stopped.")
+            except Exception:
+                proc.kill()
+                print(f"[WARN] {name} killed.")
         print("[INFO] Done.")
 
 if __name__ == "__main__":
