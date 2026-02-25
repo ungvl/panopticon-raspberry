@@ -1,0 +1,3 @@
+[submodule "activitywatch"]
+	path = activitywatch
+	url = https://github.com/ActivityWatch/activitywatch.git
