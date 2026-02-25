@@ -36,10 +36,10 @@ def main():
     # Wait a bit for server to start
     time.sleep(5)
     
-    # 2. Start aw-watcher-window
-    window_proc = start_process(f'"{sys.executable}" -m aw_watcher_window', "aw-watcher-window")
-    if window_proc:
-        processes.append(window_proc)
+    # 2. aw-watcher-window SKIPPED (Native X11 tracking is now inside screen_tracker)
+    # window_proc = start_process(f'"{sys.executable}" -m aw_watcher_window', "aw-watcher-window")
+    # if window_proc:
+    #     processes.append(window_proc)
 
     # 3. Start screen_tracker.py
     # We run it as a module to handle relative imports

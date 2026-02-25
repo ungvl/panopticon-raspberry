@@ -4,3 +4,4 @@ opencv-python
 onnxruntime
 requests
 numpy
+python-xlib
