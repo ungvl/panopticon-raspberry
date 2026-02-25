@@ -7,16 +7,6 @@ import traceback
 # Configure logging FIRST
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Conditional Imports ---
-# ActivityWatch is OPTIONAL. The tracker works without it.
-try:
-    from aw_core.models import Event
-    from aw_client import ActivityWatchClient
-    AW_AVAILABLE = True
-except ImportError:
-    logging.warning("ActivityWatch libraries (aw_core/aw_client) not found. AW logging disabled.")
-    AW_AVAILABLE = False
-
 # Database connector
 try:
     from src.db_connector import DatabaseConnector
@@ -35,7 +25,7 @@ except ImportError:
     logging.warning("python-xlib not installed. Native X11 tracking disabled.")
     XLIB_AVAILABLE = False
 
-# --- X11 Window Info ---
+
 def get_native_window_info(display):
     """Get the currently focused window's app class and title via X11."""
     if not display:
@@ -72,7 +62,6 @@ def get_native_window_info(display):
         return "unknown", "unknown"
 
 
-# --- Main Tracker ---
 def run_tracker():
     logging.info("=" * 50)
     logging.info("PANOPTICON SCREEN TRACKER STARTING")
@@ -86,7 +75,7 @@ def run_tracker():
             logging.info("DatabaseConnector: OK")
         except Exception as e:
             logging.error(f"DatabaseConnector failed: {e}")
-    
+
     # 2. X11 Display
     display = None
     if XLIB_AVAILABLE:
@@ -95,29 +84,15 @@ def run_tracker():
             logging.info(f"X11 Display: OK (DISPLAY={os.environ.get('DISPLAY', 'not set')})")
         except Exception as e:
             logging.error(f"X11 Display failed: {e}")
-    
+
     if not display:
-        logging.error("No display connection. Cannot track windows. Exiting tracker.")
+        logging.error("No display connection. Cannot track windows.")
         logging.error("Make sure you are running under X11 and DISPLAY is set.")
-        # Don't return immediately — sleep so start_aw doesn't spam restarts
         time.sleep(30)
         return
 
-    # 3. ActivityWatch (optional)
-    aw = None
-    bucket_id = None
-    if AW_AVAILABLE:
-        try:
-            client_name = "panopticon-screen-tracker"
-            aw = ActivityWatchClient(client_name, testing=False)
-            bucket_id = f"{client_name}_window"
-            aw.create_bucket(bucket_id, event_type="currentwindow", queued=True)
-            logging.info(f"ActivityWatch: OK (bucket: {bucket_id})")
-        except Exception as e:
-            logging.warning(f"ActivityWatch connection failed: {e}. Continuing without AW.")
-            aw = None
-
     logging.info("Tracking active window via native X11...")
+    logging.info("Screen tracker is RUNNING. You will see logs when you switch windows.")
 
     last_app = None
     last_title = None
@@ -148,18 +123,6 @@ def run_tracker():
                             })
                         except Exception as e:
                             logging.error(f"Appwrite send failed: {e}")
-
-                    # Send to ActivityWatch
-                    if aw and bucket_id:
-                        try:
-                            event = Event(
-                                timestamp=ts,
-                                duration=duration,
-                                data={"app": last_app, "title": last_title}
-                            )
-                            aw.heartbeat(bucket_id, event, pulsetime=10)
-                        except Exception as e:
-                            logging.warning(f"AW heartbeat failed: {e}")
 
                 # Reset for new window
                 last_app = app
