@@ -112,18 +112,15 @@ sudo modprobe w1-gpio 2>/dev/null || true
 sudo modprobe w1-therm 2>/dev/null || true
 
 # --- HX711 Scale Library ---
+# hx711py has no setup.py — it's used by cloning and importing directly.
 echo "[INFO] Checking HX711 library..."
-if ! python3 -c "import hx711" 2>/dev/null; then
-    echo "[INFO] Installing hx711py library..."
-    if [ ! -d "/tmp/hx711py" ]; then
-        git clone https://github.com/j-dohnalek/hx711py /tmp/hx711py
-    fi
-    cd /tmp/hx711py
-    sudo python3 setup.py install
-    cd - > /dev/null
-    echo "[OK] hx711py installed."
+HX711_DIR="$(pwd)/hx711py"
+if [ ! -f "$HX711_DIR/hx711.py" ]; then
+    echo "[INFO] Cloning hx711py library..."
+    git clone https://github.com/j-dohnalek/hx711py "$HX711_DIR"
+    echo "[OK] hx711py cloned to $HX711_DIR"
 else
-    echo "[OK] hx711py already installed."
+    echo "[OK] hx711py already present."
 fi
 
 # Create virtual environment if it doesn't exist

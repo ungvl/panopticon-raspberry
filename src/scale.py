@@ -119,6 +119,12 @@ class Scale:
     def _init_hx711(self):
         """Initialize the HX711 sensor."""
         try:
+            # hx711py is cloned as a sibling directory, not pip-installed
+            import sys
+            hx711_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hx711py")
+            if hx711_path not in sys.path:
+                sys.path.insert(0, hx711_path)
+
             from hx711 import HX711
             self.hx = HX711(self.dt_pin, self.sck_pin)
             self.hx.set_offset(self.offset)
@@ -127,7 +133,7 @@ class Scale:
         except ImportError:
             logging.error(
                 "hx711 module not found! "
-                "Install with: sudo git clone https://github.com/j-dohnalek/hx711py && cd hx711py && sudo python3 setup.py install"
+                "Clone it with: git clone https://github.com/j-dohnalek/hx711py"
             )
             self.hx = None
         except Exception as e:

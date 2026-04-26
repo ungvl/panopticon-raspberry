@@ -6,3 +6,4 @@ __pycache__/
 src/known_faces/
 *.db
 scale_calibration.json
+hx711py/

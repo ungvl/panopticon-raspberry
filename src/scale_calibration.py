@@ -58,13 +58,16 @@ def main():
     print()
 
     try:
+        # hx711py is cloned as a sibling directory, not pip-installed
+        hx711_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hx711py")
+        if hx711_path not in sys.path:
+            sys.path.insert(0, hx711_path)
+
         from hx711 import HX711
     except ImportError:
         print("[ERROR] hx711 module not found!")
-        print("Install it with:")
-        print("  sudo git clone https://github.com/j-dohnalek/hx711py")
-        print("  cd hx711py")
-        print("  sudo python3 setup.py install")
+        print("Clone it with:")
+        print("  git clone https://github.com/j-dohnalek/hx711py")
         sys.exit(1)
 
     # Initialize
