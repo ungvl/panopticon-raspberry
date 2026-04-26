@@ -48,21 +48,26 @@ A comprehensive tracking solution using ActivityWatch for screen tracking and In
 ## Features
 - **Screen Tracking**: Tracks active window title and application using ActivityWatch.
 - **Face Recognition**: Detects and identifies faces using InsightFace (RAM-only).
+- **Scale / Weight Tracking**: Reads weight from an HX711 load cell and logs changes.
 - **Cloud Sync**: Fetches encrypted user identities directly from **Appwrite**.
 - **Privacy by Design**: No local database or image storage.
 
 ## Project Structure
 ```
 panopticon-raspberry/
-├── src/                    # Source code
-│   ├── screen_tracker.py   # ActivityWatch integration
-│   ├── face_tracker.py     # Face recognition logic (RAM-only)
-│   ├── face_logger.py      # Orchestrator & Cloud Sync
-│   ├── db_connector.py     # Appwrite Cloud Handler
-│   └── start_aw.py         # Main entry point
-├── activitywatch/          # ActivityWatch submodules
-├── setup.sh                # Setup script
-├── requirements.txt        # Python dependencies
+├── src/                        # Source code
+│   ├── screen_tracker.py       # ActivityWatch integration
+│   ├── face_tracker.py         # Face recognition logic (RAM-only)
+│   ├── face_logger.py          # Orchestrator & Cloud Sync
+│   ├── scale.py                # HX711 scale reader
+│   ├── scale_calibration.py    # Interactive scale calibration wizard
+│   ├── db_connector.py         # Appwrite Cloud Handler
+│   ├── clock.py                # LCD clock display
+│   └── start_aw.py             # Main entry point
+├── activitywatch/              # ActivityWatch submodules
+├── scale_calibration.json      # Scale calibration values (generated, git-ignored)
+├── setup.sh                    # Setup script
+├── requirements.txt            # Python dependencies
 └── README.md
 ```
 
@@ -130,6 +135,67 @@ To stop, press `Ctrl+C` in the terminal.
 ### Event Logging
 - **Screen Events**: Pushed to Appwrite via ActivityWatch integration.
 - **Face Events**: Pushed to Appwrite Face Receiver function.
+- **Weight Events**: Pushed to Appwrite Weight Receiver function (if configured).
+
+## Scale (HX711 Load Cell)
+
+The scale module reads weight from a load cell connected via an HX711 amplifier.
+
+### Wiring
+
+| HX711 Pin | Raspberry Pi Pin |
+|-----------|-----------------|
+| VCC | 3.3V or 5V |
+| GND | GND |
+| DT (DOUT) | GPIO 5 (default, configurable via `HX711_DT_PIN`) |
+| SCK | GPIO 6 (default, configurable via `HX711_SCK_PIN`) |
+
+### Installation
+
+Install the `hx711py` library:
+```bash
+sudo apt-get install git
+sudo git clone https://github.com/j-dohnalek/hx711py
+cd hx711py
+sudo python3 setup.py install
+```
+
+### Calibration
+
+> [!IMPORTANT]
+> Calibration is **required** before the scale can return meaningful weight values. Without it, readings will be raw sensor data.
+
+Run the interactive calibration wizard:
+```bash
+sudo python3 -m src.scale_calibration
+```
+
+The wizard walks through 3 steps:
+1. **Offset** — reads the empty scale to get the zero-point value.
+2. **Ratio** — you place a known weight (e.g. 500g) and the script calculates the conversion ratio: `ratio = (raw_reading - offset) / known_weight`.
+3. **Verify** — takes 5 test readings for you to confirm accuracy.
+
+Calibration values are saved to `scale_calibration.json`. You can also set them via `.env`:
+```ini
+HX711_OFFSET=12345.67
+HX711_RATIO=420.50
+```
+
+### Scale Configuration (.env)
+
+```ini
+# GPIO pins (optional, defaults shown)
+HX711_DT_PIN=5
+HX711_SCK_PIN=6
+
+# Reading behavior
+SCALE_READ_INTERVAL=2.0           # Seconds between reads
+SCALE_CHANGE_THRESHOLD=5.0        # Min grams change to trigger a log
+SCALE_HEARTBEAT_INTERVAL=60.0     # Force log every N seconds even if stable
+
+# Appwrite endpoint (optional — without this, weight is logged locally only)
+APPWRITE_WEIGHT_FUNCTION_URL=https://your-function-id.fra.appwrite.run/
+```
 
 ## Troubleshooting
 

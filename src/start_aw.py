@@ -34,6 +34,7 @@ def main():
         (f'"{sys.executable}" -m src.screen_tracker', "screen_tracker", True),
         (f'"{sys.executable}" -m src.face_logger', "face_logger", False),
         (f'"{sys.executable}" -m src.clock', "lcd_clock", False),
+        (f'"{sys.executable}" -m src.scale', "scale", False),
     ]
 
     # Start aw-server first and wait for it

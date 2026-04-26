@@ -5,3 +5,4 @@ __pycache__/
 *.log
 src/known_faces/
 *.db
+scale_calibration.json

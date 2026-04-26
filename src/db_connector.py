@@ -245,3 +245,43 @@ class DatabaseConnector:
                 
         except Exception as e:
             print(f"[Appwrite] Failed to send face data: {e}")
+
+    def send_weight_data(self, data):
+        """
+        Sends weight/scale data to Appwrite.
+        """
+        self.send_weight_to_appwrite(data)
+
+    def send_weight_to_appwrite(self, data):
+        """
+        Sends weight measurement data to the Appwrite Weight Receiver Function.
+        """
+        APPWRITE_WEIGHT_FUNCTION_URL = os.getenv("APPWRITE_WEIGHT_FUNCTION_URL")
+        if not APPWRITE_WEIGHT_FUNCTION_URL:
+            # If no Appwrite function is configured, just log locally
+            print(f"[Scale] Weight: {data.get('weight', '?')}g (local only — no APPWRITE_WEIGHT_FUNCTION_URL set)")
+            return
+
+        try:
+            dt = datetime.fromisoformat(data['timestamp'])
+            timestamp_unix = int(dt.timestamp())
+            day = dt.isoformat()
+
+            payload = {
+                "weight": data.get("weight", 0),
+                "unit": data.get("unit", "g"),
+                "timestamp": timestamp_unix,
+                "day": day,
+                "reason": data.get("reason", "change"),
+                "users": self.primary_user_id if self.primary_user_id else None
+            }
+
+            response = requests.post(APPWRITE_WEIGHT_FUNCTION_URL, json=payload)
+
+            if response.status_code == 200:
+                print(f"[Appwrite] Weight logged: {data.get('weight', '?')}g")
+            else:
+                print(f"[Appwrite] Weight Error {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[Appwrite] Failed to send weight data: {e}")
