@@ -285,3 +285,83 @@ class DatabaseConnector:
 
         except Exception as e:
             print(f"[Appwrite] Failed to send weight data: {e}")
+
+    def send_temperature_data(self, data):
+        """
+        Sends temperature data to Appwrite.
+        """
+        self.send_temperature_to_appwrite(data)
+
+    def send_temperature_to_appwrite(self, data):
+        """
+        Sends temperature data to the Appwrite Temperature Receiver Function.
+        """
+        APPWRITE_TEMPERATURE_FUNCTION_URL = os.getenv("APPWRITE_TEMPERATURE_FUNCTION_URL")
+        if not APPWRITE_TEMPERATURE_FUNCTION_URL:
+            print(f"[Temp] Temperature: {data.get('temperature', '?')}°C (local only — no APPWRITE_TEMPERATURE_FUNCTION_URL set)")
+            return
+
+        try:
+            dt = datetime.fromisoformat(data['timestamp'])
+            timestamp_unix = int(dt.timestamp())
+            day = dt.isoformat()
+
+            payload = {
+                "temperature": data.get("temperature", 0),
+                "unit": data.get("unit", "C"),
+                "timestamp": timestamp_unix,
+                "day": day,
+                "reason": data.get("reason", "change"),
+                "users": self.primary_user_id if self.primary_user_id else None
+            }
+
+            response = requests.post(APPWRITE_TEMPERATURE_FUNCTION_URL, json=payload)
+
+            if response.status_code == 200:
+                print(f"[Appwrite] Temperature logged: {data.get('temperature', '?')}°C")
+            else:
+                print(f"[Appwrite] Temperature Error {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[Appwrite] Failed to send temperature data: {e}")
+
+    def send_heater_data(self, data):
+        """
+        Sends heater state data to Appwrite.
+        """
+        self.send_heater_to_appwrite(data)
+
+    def send_heater_to_appwrite(self, data):
+        """
+        Sends heater state change data to the Appwrite Heater Receiver Function.
+        """
+        APPWRITE_HEATER_FUNCTION_URL = os.getenv("APPWRITE_HEATER_FUNCTION_URL")
+        if not APPWRITE_HEATER_FUNCTION_URL:
+            print(f"[Heater] State: {data.get('state', '?')} (local only — no APPWRITE_HEATER_FUNCTION_URL set)")
+            return
+
+        try:
+            dt = datetime.fromisoformat(data['timestamp'])
+            timestamp_unix = int(dt.timestamp())
+            day = dt.isoformat()
+
+            payload = {
+                "state": data.get("state", "off"),
+                "temperature": data.get("temperature"),
+                "weight": data.get("weight"),
+                "target_temp": data.get("target_temp"),
+                "timestamp": timestamp_unix,
+                "day": day,
+                "users": self.primary_user_id if self.primary_user_id else None
+            }
+
+            response = requests.post(APPWRITE_HEATER_FUNCTION_URL, json=payload)
+
+            if response.status_code == 200:
+                print(f"[Appwrite] Heater state logged: {data.get('state', '?')}")
+            else:
+                print(f"[Appwrite] Heater Error {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[Appwrite] Failed to send heater data: {e}")
+

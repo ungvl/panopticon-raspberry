@@ -68,6 +68,10 @@ WEIGHT_CHANGE_THRESHOLD = float(os.getenv("SCALE_CHANGE_THRESHOLD", "5.0"))
 HEARTBEAT_INTERVAL = float(os.getenv("SCALE_HEARTBEAT_INTERVAL", "60.0"))
 
 
+# Shared weight file — other modules (e.g. heater.py) can read the latest weight
+WEIGHT_FILE = "/tmp/panopticon_weight.json"
+
+
 class Scale:
     """Reads weight from HX711 load cell and reports changes."""
 
@@ -200,6 +204,16 @@ class Scale:
                 if weight is None:
                     time.sleep(READ_INTERVAL)
                     continue
+
+                # Write latest weight to shared file for other modules (e.g. heater)
+                try:
+                    with open(WEIGHT_FILE, 'w') as f:
+                        json.dump({
+                            "weight": weight,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }, f)
+                except Exception:
+                    pass  # Non-critical — heater will just use stale data
 
                 weight_changed = abs(weight - self.last_weight) >= WEIGHT_CHANGE_THRESHOLD
                 heartbeat_due = (now - self.last_report_time) >= HEARTBEAT_INTERVAL

@@ -86,6 +86,46 @@ sudo apt-get install -y \
     libswscale-dev \
     python3-tk
 
+# --- DS18B20 Temperature Sensor (1-Wire) Setup ---
+BOOT_CONFIG="/boot/config.txt"
+W1_OVERLAY="dtoverlay=w1-gpio,gpiopin=4"
+NEEDS_REBOOT=false
+
+echo "[INFO] Checking 1-Wire (DS18B20) configuration..."
+if [ -f "$BOOT_CONFIG" ]; then
+    if ! grep -q "dtoverlay=w1-gpio" "$BOOT_CONFIG"; then
+        echo "[INFO] Enabling 1-Wire overlay for DS18B20 (GPIO 4)..."
+        echo "" | sudo tee -a "$BOOT_CONFIG" > /dev/null
+        echo "# DS18B20 Temperature Sensor (1-Wire)" | sudo tee -a "$BOOT_CONFIG" > /dev/null
+        echo "$W1_OVERLAY" | sudo tee -a "$BOOT_CONFIG" > /dev/null
+        NEEDS_REBOOT=true
+        echo "[OK] 1-Wire overlay added to $BOOT_CONFIG"
+    else
+        echo "[OK] 1-Wire overlay already configured."
+    fi
+else
+    echo "[WARNING] $BOOT_CONFIG not found — you may need to enable 1-Wire manually."
+fi
+
+# Load 1-Wire kernel modules (for current session, without reboot)
+sudo modprobe w1-gpio 2>/dev/null || true
+sudo modprobe w1-therm 2>/dev/null || true
+
+# --- HX711 Scale Library ---
+echo "[INFO] Checking HX711 library..."
+if ! python3 -c "import hx711" 2>/dev/null; then
+    echo "[INFO] Installing hx711py library..."
+    if [ ! -d "/tmp/hx711py" ]; then
+        git clone https://github.com/j-dohnalek/hx711py /tmp/hx711py
+    fi
+    cd /tmp/hx711py
+    sudo python3 setup.py install
+    cd - > /dev/null
+    echo "[OK] hx711py installed."
+else
+    echo "[OK] hx711py already installed."
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "[INFO] Creating virtual environment..."
@@ -141,3 +181,17 @@ echo "[INFO] To start the tracker, run: ./run.sh"
 echo "[INFO] Note: Make sure your .env file is configured."
 echo "[INFO] Note: On the first run, the system will download ~200MB of AI models."
 echo "[INFO]       This may take a few minutes depending on your internet speed."
+
+if [ "$NEEDS_REBOOT" = true ]; then
+    echo ""
+    echo "[WARNING] *** REBOOT REQUIRED ***"
+    echo "[WARNING] 1-Wire overlay was added to $BOOT_CONFIG."
+    echo "[WARNING] Please reboot before using the DS18B20 temperature sensor:"
+    echo "[WARNING]   sudo reboot"
+fi
+
+echo ""
+echo "[INFO] Hardware setup reminders:"
+echo "[INFO]   - HX711 Scale:  Run 'sudo python3 -m src.scale_calibration' before first use"
+echo "[INFO]   - DS18B20 Temp:  Verify with 'ls /sys/bus/w1/devices/28-*'"
+echo "[INFO]   - Heater Relay:  Wired to GPIO 26 (BCM), relay IN1"

@@ -35,6 +35,8 @@ def main():
         (f'"{sys.executable}" -m src.face_logger', "face_logger", False),
         (f'"{sys.executable}" -m src.clock', "lcd_clock", False),
         (f'"{sys.executable}" -m src.scale', "scale", False),
+        (f'"{sys.executable}" -m src.temperature', "temperature", False),
+        (f'"{sys.executable}" -m src.heater', "heater", False),
     ]
 
     # Start aw-server first and wait for it

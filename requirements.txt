@@ -5,3 +5,4 @@ onnxruntime
 requests
 numpy
 python-xlib
+RPi.GPIO
