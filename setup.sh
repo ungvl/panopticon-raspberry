@@ -87,7 +87,12 @@ sudo apt-get install -y \
     python3-tk
 
 # --- DS18B20 Temperature Sensor (1-Wire) Setup ---
-BOOT_CONFIG="/boot/config.txt"
+# Check for Bookworm vs older Pi OS config location
+if [ -f "/boot/firmware/config.txt" ]; then
+    BOOT_CONFIG="/boot/firmware/config.txt"
+else
+    BOOT_CONFIG="/boot/config.txt"
+fi
 W1_OVERLAY="dtoverlay=w1-gpio,gpiopin=4"
 NEEDS_REBOOT=false
 
