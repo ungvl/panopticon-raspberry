@@ -61,11 +61,15 @@ DEFAULT_RATIO = 1  # raw_value / grams
 # How often to read the scale (seconds)
 READ_INTERVAL = float(os.getenv("SCALE_READ_INTERVAL", "2.0"))
 
-# Minimum weight change (grams) to trigger a new log entry
-WEIGHT_CHANGE_THRESHOLD = float(os.getenv("SCALE_CHANGE_THRESHOLD", "5.0"))
+# --- Coffee State Machine ---
+# Minimum weight to consider a cup with coffee is present
+COFFEE_THRESHOLD = float(os.getenv("SCALE_COFFEE_THRESHOLD", "150.0"))  # grams
 
-# How often to send data to Appwrite even if weight hasn't changed (seconds)
-HEARTBEAT_INTERVAL = float(os.getenv("SCALE_HEARTBEAT_INTERVAL", "60.0"))
+# Weight below this = cup removed / scale empty
+CUP_REMOVE_THRESHOLD = float(os.getenv("SCALE_CUP_REMOVE_THRESHOLD", "50.0"))  # grams
+
+# Weight drop (grams) over one read cycle to consider active drinking
+DRINKING_DROP_THRESHOLD = float(os.getenv("SCALE_DRINKING_DROP_THRESHOLD", "10.0"))  # grams
 
 
 # Shared weight file — other modules (e.g. heater.py) can read the latest weight
@@ -187,31 +191,38 @@ class Scale:
 
     def start(self, callback=None):
         """
-        Main loop: continuously read weight and report significant changes.
+        Main loop: coffee state machine.
+        Detects when a coffee is placed, being drunk, and removed.
+        Only fires callback on meaningful state transitions — not on every reading.
 
         Args:
-            callback: Optional function(weight_data_dict) called on weight changes.
+            callback: Optional function(coffee_event_dict) called on coffee events.
+                      Event types: 'coffee_detected', 'coffee_drinking', 'coffee_done'
         """
         if self.hx is None:
             logging.error("Cannot start: HX711 not initialized.")
             logging.error("Make sure the hx711py library is installed and wiring is correct.")
             return
 
-        logging.info("Scale reader started.")
+        logging.info("Scale reader started (coffee state machine).")
         logging.info(f"  Read interval: {READ_INTERVAL}s")
-        logging.info(f"  Change threshold: {WEIGHT_CHANGE_THRESHOLD}g")
-        logging.info(f"  Heartbeat interval: {HEARTBEAT_INTERVAL}s")
+        logging.info(f"  Coffee threshold: {COFFEE_THRESHOLD}g")
+        logging.info(f"  Cup remove threshold: {CUP_REMOVE_THRESHOLD}g")
+        logging.info(f"  Drinking drop threshold: {DRINKING_DROP_THRESHOLD}g per cycle")
+
+        # States: 'empty', 'coffee_present'
+        state = 'empty'
+        prev_weight = 0.0
 
         try:
             while True:
                 weight = self.read_weight()
-                now = time.time()
 
                 if weight is None:
                     time.sleep(READ_INTERVAL)
                     continue
 
-                # Write latest weight to shared file for other modules (e.g. heater)
+                # Write latest weight to shared file for heater.py
                 try:
                     with open(WEIGHT_FILE, 'w') as f:
                         json.dump({
@@ -219,27 +230,48 @@ class Scale:
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         }, f)
                 except Exception:
-                    pass  # Non-critical — heater will just use stale data
+                    pass  # Non-critical
 
-                weight_changed = abs(weight - self.last_weight) >= WEIGHT_CHANGE_THRESHOLD
-                heartbeat_due = (now - self.last_report_time) >= HEARTBEAT_INTERVAL
+                now_iso = datetime.now(timezone.utc).isoformat()
 
-                if weight_changed or heartbeat_due:
-                    reason = "change" if weight_changed else "heartbeat"
-                    logging.info(f"Weight: {weight}g ({reason})")
+                if state == 'empty':
+                    # Transition: cup with coffee placed
+                    if weight >= COFFEE_THRESHOLD:
+                        state = 'coffee_present'
+                        logging.info(f"☕ Coffee detected! Weight: {weight}g")
+                        if callback:
+                            callback({
+                                "event": "coffee_detected",
+                                "timestamp": now_iso,
+                                "weight": weight,
+                                "unit": "g",
+                            })
 
-                    self.last_weight = weight
-                    self.last_report_time = now
+                elif state == 'coffee_present':
+                    # Transition: cup removed
+                    if weight < CUP_REMOVE_THRESHOLD:
+                        state = 'empty'
+                        logging.info(f"✅ Coffee done. Weight dropped to {weight}g")
+                        if callback:
+                            callback({
+                                "event": "coffee_done",
+                                "timestamp": now_iso,
+                                "weight": weight,
+                                "unit": "g",
+                            })
 
-                    if callback:
-                        data = {
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "weight": weight,
-                            "unit": "g",
-                            "reason": reason,
-                        }
-                        callback(data)
+                    # Active drinking: weight dropping significantly each cycle
+                    elif (prev_weight - weight) >= DRINKING_DROP_THRESHOLD:
+                        logging.info(f"🫗 Drinking detected: {prev_weight}g → {weight}g")
+                        if callback:
+                            callback({
+                                "event": "coffee_drinking",
+                                "timestamp": now_iso,
+                                "weight": weight,
+                                "unit": "g",
+                            })
 
+                prev_weight = weight
                 time.sleep(READ_INTERVAL)
 
         except KeyboardInterrupt:
@@ -264,12 +296,12 @@ def main():
     db = DatabaseConnector()
     scale = Scale()
 
-    def on_weight(data):
-        """Callback when weight changes or heartbeat fires."""
-        logging.info(f"Sending weight data: {data['weight']}g")
-        db.send_weight_data(data)
+    def on_coffee_event(data):
+        """Callback when a coffee state transition is detected."""
+        logging.info(f"Coffee event: {data['event']} @ {data.get('weight', '?')}g")
+        db.send_coffee_event(data)
 
-    scale.start(callback=on_weight)
+    scale.start(callback=on_coffee_event)
 
 
 if __name__ == "__main__":

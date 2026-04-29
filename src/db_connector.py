@@ -246,20 +246,14 @@ class DatabaseConnector:
         except Exception as e:
             print(f"[Appwrite] Failed to send face data: {e}")
 
-    def send_weight_data(self, data):
+    def send_coffee_event(self, data):
         """
-        Sends weight/scale data to Appwrite.
+        Sends a coffee state event (coffee_detected, coffee_drinking, coffee_done)
+        to the Appwrite Coffee Logger Function.
         """
-        self.send_weight_to_appwrite(data)
-
-    def send_weight_to_appwrite(self, data):
-        """
-        Sends weight measurement data to the Appwrite Weight Receiver Function.
-        """
-        APPWRITE_WEIGHT_FUNCTION_URL = os.getenv("APPWRITE_WEIGHT_FUNCTION_URL")
-        if not APPWRITE_WEIGHT_FUNCTION_URL:
-            # If no Appwrite function is configured, just log locally
-            print(f"[Scale] Weight: {data.get('weight', '?')}g (local only — no APPWRITE_WEIGHT_FUNCTION_URL set)")
+        APPWRITE_COFFEE_FUNCTION_URL = os.getenv("APPWRITE_COFFEE_FUNCTION_URL")
+        if not APPWRITE_COFFEE_FUNCTION_URL:
+            print(f"[Scale] Coffee event: {data.get('event', '?')} @ {data.get('weight', '?')}g (local only — no APPWRITE_COFFEE_FUNCTION_URL set)")
             return
 
         try:
@@ -268,23 +262,27 @@ class DatabaseConnector:
             day = dt.isoformat()
 
             payload = {
-                "weight": data.get("weight", 0),
-                "unit": data.get("unit", "g"),
+                "event":     data.get("event", "unknown"),   # coffee_detected / coffee_drinking / coffee_done
                 "timestamp": timestamp_unix,
-                "day": day,
-                "reason": data.get("reason", "change"),
-                "users": self.primary_user_id if self.primary_user_id else None
+                "day":       day,
+                "weight":    data.get("weight"),
+                "unit":      data.get("unit", "g"),
+                "users":     self.primary_user_id if self.primary_user_id else None
             }
 
-            response = requests.post(APPWRITE_WEIGHT_FUNCTION_URL, json=payload)
+            response = requests.post(APPWRITE_COFFEE_FUNCTION_URL, json=payload)
 
             if response.status_code == 200:
-                print(f"[Appwrite] Weight logged: {data.get('weight', '?')}g")
+                print(f"[Appwrite] Coffee event logged: {data.get('event')} ({data.get('weight', '?')}g)")
             else:
-                print(f"[Appwrite] Weight Error {response.status_code}: {response.text}")
+                print(f"[Appwrite] Coffee Error {response.status_code}: {response.text}")
 
         except Exception as e:
-            print(f"[Appwrite] Failed to send weight data: {e}")
+            print(f"[Appwrite] Failed to send coffee event: {e}")
+
+    # Legacy alias — kept for compatibility, routes to send_coffee_event
+    def send_weight_data(self, data):
+        self.send_coffee_event(data)
 
     def send_temperature_data(self, data):
         """
